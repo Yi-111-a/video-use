@@ -1,7 +1,7 @@
 """Batch-transcribe every video in a directory with 4 parallel workers.
 
 Walks <videos_dir> for common video extensions, runs ElevenLabs Scribe on
-each, writes transcripts to <videos_dir>/edit/transcripts/<name>.json.
+each, writes transcripts to <videos_dir>/edit/transcripts/<name><ext>.json.
 
 Cached per-file: any source that already has a transcript is skipped.
 
@@ -20,7 +20,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from transcribe import load_api_key, transcribe_one, transcript_path
+from transcribe import load_api_key, resolve_transcript, transcribe_one
 
 
 VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
@@ -76,7 +76,7 @@ def main() -> None:
         sys.exit(f"no videos found in {videos_dir}")
 
     already_cached = [v for v in videos
-                      if transcript_path(edit_dir, v, args.audio_track).exists()]
+                      if resolve_transcript(edit_dir, v, args.audio_track).exists()]
     pending = [v for v in videos if v not in already_cached]
 
     print(f"found {len(videos)} videos ({len(already_cached)} cached, {len(pending)} to transcribe)")

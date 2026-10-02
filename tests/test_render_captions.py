@@ -72,6 +72,28 @@ class BuildMasterSrtTests(unittest.TestCase):
             self.assertEqual([c[2] for c in cues], ["90% OF", "WHAT A WEB", "AGENT DOES", "IS COMPLETELY", "WASTED.", "WE FIX THIS."])
             self.assertEqual(cues[0][1], "00:00:00,090 --> 00:00:00,590")
 
+    def test_captions_find_the_extension_qualified_transcript(self):
+        with tempfile.TemporaryDirectory() as d:
+            edit = Path(d)
+            (edit / "transcripts").mkdir()
+            (edit / "transcripts" / "C0103.MP4.json").write_text(json.dumps({"words": TAKE}))
+            edl = {"sources": {"C0103": "/abs/takes/C0103.MP4"}, "ranges": [{"source": "C0103", "start": 2.55, "end": 6.8}]}
+            out = edit / "master.srt"
+            render.build_master_srt(edl, edit, out)
+            self.assertEqual(len(out.read_text().strip().split("\n\n")), 6)
+
+    def test_each_same_stem_take_gets_its_own_captions(self):
+        with tempfile.TemporaryDirectory() as d:
+            edit = Path(d)
+            (edit / "transcripts").mkdir()
+            (edit / "transcripts" / "intro.mp4.json").write_text(json.dumps({"words": TAKE}))
+            (edit / "transcripts" / "intro.mov.json").write_text(json.dumps({"words": []}))
+            edl = {"sources": {"intro": "/abs/takes/intro.mov"}, "ranges": [{"source": "intro", "start": 2.55, "end": 6.8}]}
+            out = edit / "master.srt"
+            render.build_master_srt(edl, edit, out)
+            # the .mov take is the one the EDL names, and its transcript is empty
+            self.assertEqual(out.read_text(), "")
+
 
 class SubtitlesPathTests(unittest.TestCase):
     def test_relative_to_edl_dir(self):

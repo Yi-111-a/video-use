@@ -30,6 +30,15 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+try:
+    from transcribe import resolve_transcript  # same directory
+except Exception:
+    def resolve_transcript(edit_dir: Path, video: Path, audio_track: int = 0):  # type: ignore
+        """Fallback if transcribe.py cannot be imported: both name layouts, no legacy handling."""
+        current = edit_dir / "transcripts" / f"{video.stem}{video.suffix}.json"
+        legacy = edit_dir / "transcripts" / f"{video.stem}.json"
+        return current if current.exists() else legacy
+
 
 # -------- Frame extraction ---------------------------------------------------
 
@@ -342,7 +351,9 @@ def main() -> None:
         type=Path,
         default=None,
         help="Path to transcript.json for word labels + silence shading. "
-             "If omitted, will auto-resolve to <video_parent>/edit/transcripts/<video_stem>.json",
+             "If omitted, will auto-resolve to <video_parent>/edit/transcripts/"
+             "<video_stem><video_ext>.json (or a <video_stem>.json written before the "
+             "extension was part of the name)",
     )
     ap.add_argument(
         "--edl",
@@ -368,7 +379,7 @@ def main() -> None:
     # Auto-resolve transcript if not given
     transcript = args.transcript
     if transcript is None:
-        auto = video.parent / "edit" / "transcripts" / f"{video.stem}.json"
+        auto = resolve_transcript(video.parent / "edit", video)
         if auto.exists():
             transcript = auto
 
