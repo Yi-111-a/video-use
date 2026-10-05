@@ -150,9 +150,42 @@ class BatchCacheTests(unittest.TestCase):
         cached_path.parent.mkdir(parents=True, exist_ok=True)
         cached_path.write_text("{}")
 
-        cached = [v for v in videos
-                  if transcribe.resolve_transcript(self.edit, v).exists()]
+        # select_pending() is the helper transcribe_batch.main() itself calls
+        cached, pending = transcribe_batch.select_pending(videos, self.edit)
         self.assertEqual([v.name for v in cached], ["intro.mp4"])
+        self.assertEqual([v.name for v in pending], ["intro.mov"])
+
+    def test_a_stem_only_file_does_not_make_a_new_take_look_cached(self):
+        """The collision has to stay fixed for projects that predate the extension."""
+        (self.takes / "intro.mp4").write_bytes(b"")
+        (self.takes / "intro.mov").write_bytes(b"")
+        legacy = self.edit / "transcripts" / "intro.json"
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        legacy.write_text("{}")  # written by the pre-extension layout, from the mp4
+
+        videos = transcribe_batch.find_videos(self.takes)
+        cached, pending = transcribe_batch.select_pending(videos, self.edit)
+        # the stem-only file cannot be attributed to either take, so neither claims it
+        self.assertEqual(cached, [])
+        # find_videos sorts, so .mov comes before .mp4
+        self.assertEqual([v.name for v in pending], ["intro.mov", "intro.mp4"])
+        for v in videos:
+            self.assertEqual(transcribe.resolve_transcript(self.edit, v).name,
+                             f"intro{v.suffix}.json")
+
+    def test_a_stem_only_file_still_serves_a_take_that_shares_its_stem_with_nothing(self):
+        (self.takes / "intro.mp4").write_bytes(b"")
+        legacy = self.edit / "transcripts" / "intro.json"
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        legacy.write_text("{}")
+
+        videos = transcribe_batch.find_videos(self.takes)
+        cached, pending = transcribe_batch.select_pending(videos, self.edit)
+        self.assertEqual([v.name for v in cached], ["intro.mp4"])
+        self.assertEqual(pending, [])
+        # pre-existing projects keep reading the file they already have
+        self.assertEqual(transcribe.resolve_transcript(self.edit, self.takes / "intro.mp4"),
+                         legacy)
 
 
 class ParallelWriteTests(unittest.TestCase):

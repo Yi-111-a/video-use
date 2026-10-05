@@ -5,7 +5,9 @@ diarize + audio events + word-level timestamps, writes the full response
 to <edit_dir>/transcripts/<video_stem><video_ext>.json.
 
 Cached: if the output file already exists, the upload is skipped. Transcripts written
-before the extension was part of the name (<video_stem>.json) are still found and reused.
+before the extension was part of the name (<video_stem>.json) are still found and reused,
+except where another take in the same directory shares the stem and the old file cannot be
+told apart from it.
 
 Usage:
     python helpers/transcribe.py <video_path>
@@ -32,6 +34,8 @@ import requests
 
 
 SCRIBE_URL = "https://api.elevenlabs.io/v1/speech-to-text"
+
+VIDEO_EXTS = {".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV", ".avi", ".AVI", ".m4v"}
 
 
 def load_api_key() -> str:
@@ -133,15 +137,46 @@ def legacy_transcript_path(edit_dir: Path, video: Path, audio_track: int = 0) ->
     return edit_dir / "transcripts" / f"{video.stem}{suffix}.json"
 
 
+def stem_is_ambiguous(video: Path) -> bool:
+    """Whether a different supported video in the same directory shares this stem.
+
+    intro.mp4 and intro.mov are both transcribed into one edit dir, so the stem-only file
+    written before the extension was part of the name belongs to one of them and cannot be
+    attributed to either. Callers use this to refuse the legacy name rather than hand one
+    take the other's words.
+    """
+    try:
+        entries = list(video.parent.iterdir())
+    except OSError:
+        # The directory cannot be listed, so no sibling can be pointed at either. Every
+        # caller that transcribes passes a real file out of a listable directory
+        # (find_videos builds it that way), so this only happens on the read side, where a
+        # recorded source path that no longer resolves has nothing to read anyway - and
+        # refusing the legacy file there would cost existing projects their transcripts.
+        return False
+    return any(
+        p.is_file()
+        and p.suffix in VIDEO_EXTS
+        and p.stem == video.stem
+        and p.suffix != video.suffix
+        for p in entries
+    )
+
+
 def resolve_transcript(edit_dir: Path, video: Path, audio_track: int = 0) -> Path:
-    """The transcript to read for a video: the current name, else a legacy one still in place.
+    """The transcript to read for a video: the current name, else an unambiguous legacy one.
 
     A project transcribed before the extension was part of the name keeps working - the old
-    file is still found - while every new write goes to the unambiguous name. Batch mode tests
-    its cache with this too, so the writer and the cache check cannot drift apart.
+    file is still found - while every new write goes to the unambiguous name. The old file is
+    only reused when no other take in the directory shares the stem, because then it can only
+    have come from this video; where the stem is shared it is left alone rather than handed
+    to both. Batch mode tests its cache with this too, so the writer and the cache check
+    cannot drift apart.
     """
     current = transcript_path(edit_dir, video, audio_track)
     if current.exists():
+        return current
+    if stem_is_ambiguous(video):
         return current
     legacy = legacy_transcript_path(edit_dir, video, audio_track)
     return legacy if legacy.exists() else current

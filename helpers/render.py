@@ -41,11 +41,21 @@ except Exception:
 
 try:
     from transcribe import resolve_transcript_for_source  # same directory
-except Exception:
+except ImportError:
     def resolve_transcript_for_source(edit_dir: Path, source, audio_track: int = 0):  # type: ignore
-        """Fallback if transcribe.py cannot be imported: the pre-extension layout only."""
-        legacy = edit_dir / "transcripts" / f"{Path(source).stem}.json"
-        return legacy if legacy.exists() else edit_dir / "transcripts" / f"{Path(source).name}.json"
+        """Fallback if transcribe.py cannot be imported: the pre-extension layout only.
+
+        Mirrors transcript_path()/legacy_transcript_path() - current name first, then the
+        stem-only one, both carrying the track suffix. It cannot check whether the stem is
+        shared, so a same-stem pair here can still read the same file.
+        """
+        src = Path(source)
+        suffix = "" if audio_track == 0 else f".track{audio_track}"
+        current = edit_dir / "transcripts" / f"{src.stem}{src.suffix}{suffix}.json"
+        if current.exists():
+            return current
+        legacy = edit_dir / "transcripts" / f"{src.stem}{suffix}.json"
+        return legacy if legacy.exists() else current
 
 
 # -------- Subtitle style (bold-overlay, proven at 1920×1080 and 1080×1920) --

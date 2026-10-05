@@ -32,12 +32,20 @@ from PIL import Image, ImageDraw, ImageFont
 
 try:
     from transcribe import resolve_transcript  # same directory
-except Exception:
+except ImportError:
     def resolve_transcript(edit_dir: Path, video: Path, audio_track: int = 0):  # type: ignore
-        """Fallback if transcribe.py cannot be imported: both name layouts, no legacy handling."""
-        current = edit_dir / "transcripts" / f"{video.stem}{video.suffix}.json"
-        legacy = edit_dir / "transcripts" / f"{video.stem}.json"
-        return current if current.exists() else legacy
+        """Fallback if transcribe.py cannot be imported: the pre-extension layout only.
+
+        Mirrors transcript_path()/legacy_transcript_path() - current name first, then the
+        stem-only one, both carrying the track suffix. It cannot check whether the stem is
+        shared, so a same-stem pair here can still read the same file.
+        """
+        suffix = "" if audio_track == 0 else f".track{audio_track}"
+        current = edit_dir / "transcripts" / f"{video.stem}{video.suffix}{suffix}.json"
+        if current.exists():
+            return current
+        legacy = edit_dir / "transcripts" / f"{video.stem}{suffix}.json"
+        return legacy if legacy.exists() else current
 
 
 # -------- Frame extraction ---------------------------------------------------
