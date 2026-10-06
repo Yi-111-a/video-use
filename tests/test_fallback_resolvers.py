@@ -15,6 +15,11 @@ from pathlib import Path
 
 
 HELPERS = Path(__file__).parents[1] / "helpers"
+# Make `import transcribe` work when this file is run alone (python tests/… or
+# unittest on this module). test_transcript_paths.py does the same; without it,
+# collection order decides whether helpers/ is already on sys.path.
+if str(HELPERS) not in sys.path:
+    sys.path.insert(0, str(HELPERS))
 
 
 def load_with_transcribe_hidden(name: str, filename: str):

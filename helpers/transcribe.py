@@ -144,23 +144,24 @@ def stem_is_ambiguous(video: Path) -> bool:
     written before the extension was part of the name belongs to one of them and cannot be
     attributed to either. Callers use this to refuse the legacy name rather than hand one
     take the other's words.
+
+    Checks the small set of alternate VIDEO_EXTS paths directly rather than listing the
+    whole directory — batch mode calls this once per input for cache selection and again
+    for every pending input, so a full iterdir would be O(n²) on large takes folders.
     """
-    try:
-        entries = list(video.parent.iterdir())
-    except OSError:
-        # The directory cannot be listed, so no sibling can be pointed at either. Every
-        # caller that transcribes passes a real file out of a listable directory
-        # (find_videos builds it that way), so this only happens on the read side, where a
-        # recorded source path that no longer resolves has nothing to read anyway - and
-        # refusing the legacy file there would cost existing projects their transcripts.
-        return False
-    return any(
-        p.is_file()
-        and p.suffix in VIDEO_EXTS
-        and p.stem == video.stem
-        and p.suffix != video.suffix
-        for p in entries
-    )
+    parent = video.parent
+    for ext in VIDEO_EXTS:
+        if ext == video.suffix:
+            continue
+        sibling = parent / f"{video.stem}{ext}"
+        try:
+            if sibling.is_file():
+                return True
+        except OSError:
+            # Same as a directory that cannot be listed: no sibling can be proven, so the
+            # legacy name stays usable on the read side.
+            continue
+    return False
 
 
 def resolve_transcript(edit_dir: Path, video: Path, audio_track: int = 0) -> Path:
